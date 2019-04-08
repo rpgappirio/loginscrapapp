@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:oauth="http://www.mulesoft.org/schema/mule/oauth"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:os="http://www.mulesoft.org/schema/mule/os" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd 
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/oauth http://www.mulesoft.org/schema/mule/oauth/current/mule-oauth.xsd">
+    <http:listener-config name="login-api-httpListenerConfig">
+        <http:listener-connection host="0.0.0.0" port="8081" />
+    </http:listener-config>
+    <apikit:config name="login-api-config" raml="login-api.raml" outboundHeadersMapName="outboundHeaders" httpStatusVarName="httpStatus" />
+    <os:config name="ObjectStore_Config" doc:name="ObjectStore Config" doc:id="9a1ea13a-dbc3-4da0-acff-4c004bc6b2a9" >
+		<os:connection >
+			<reconnection />
+		</os:connection>
+	</os:config>
+	<os:object-store name="WebDeviceAuthTokens" doc:name="Object store" doc:id="74c638fb-9dea-41e7-ab8d-5b70a4e475e9" entryTtl="10" expirationIntervalUnit="SECONDS" config-ref="ObjectStore_Config"/>
+	<os:object-store name="WebDeviceAccessTokens" doc:name="Object store" doc:id="78fb196b-c5e2-49a7-9dff-ece71e0dba0d" entryTtl="15" entryTtlUnit="MINUTES" expirationInterval="10" expirationIntervalUnit="SECONDS" config-ref="ObjectStore_Config" />
+	<os:object-store name="UserAccessTokens" doc:name="Object store" doc:id="b58fe7de-203b-47af-9269-26aec12d7563" entryTtl="15" entryTtlUnit="MINUTES" expirationInterval="10" expirationIntervalUnit="SECONDS" config-ref="ObjectStore_Config" />
+	<http:request-config name="CC_HTTP_Request_config" doc:name="HTTP Request configuration" doc:id="79796826-92e1-49c5-9312-f70ead6516e8">
+		<http:request-connection protocol="HTTPS" host="appirio05-alliance-prtnr-na03-dw.demandware.net" port="443">
+		</http:request-connection>
+	</http:request-config>
+	<flow name="login-api-main">
+        <http:listener config-ref="login-api-httpListenerConfig" path="/api/*">
+            <http:response statusCode="#[vars.httpStatus default 200]">
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:response>
+            <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:body>#[payload]</http:body>
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:error-response>
+        </http:listener>
+        <apikit:router config-ref="login-api-config" />
+        <error-handler>
+            <on-error-propagate type="APIKIT:BAD_REQUEST">
+                <ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Bad request"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">400</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:NOT_FOUND">
+                <ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Resource not found"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">404</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:METHOD_NOT_ALLOWED">
+                <ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Method not allowed"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">405</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:NOT_ACCEPTABLE">
+                <ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Not acceptable"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">406</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:UNSUPPORTED_MEDIA_TYPE">
+                <ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Unsupported media type"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">415</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:NOT_IMPLEMENTED">
+                <ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Not Implemented"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">501</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+        </error-handler>
+    </flow>
+    <flow name="login-api-console">
+        <http:listener config-ref="login-api-httpListenerConfig" path="/console/*">
+            <http:response statusCode="#[vars.httpStatus default 200]">
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:response>
+            <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:body>#[payload]</http:body>
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:error-response>
+        </http:listener>
+        <apikit:console config-ref="login-api-config" />
+        <error-handler>
+            <on-error-propagate type="APIKIT:NOT_FOUND">
+                <ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Resource not found"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">404</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+        </error-handler>
+    </flow>
+    <flow name="put:\auth_token\(webDeviceId):application\json:login-api-config">
+        <choice doc:name="Auth State" doc:id="48032c9f-226a-494d-9e39-246d2043197c" >
+			<when expression='#[payload.state == "authorized"]'>
+				<os:contains doc:name="Existing authToken for webDeviceId" doc:id="18976997-0946-4a16-8276-df4beefcd171" key='#[attributes.uriParams.webDeviceId]' objectStore="WebDeviceAuthTokens" target="existingAuthToken" />
+				<choice doc:name="Existing authToken for webDeviceId" doc:id="ba4d2e67-85b9-4705-a251-7c295dcc0623">
+			<when expression="#[vars.existingAuthToken]">
+				<os:retrieve doc:name="Retrieve authToken for webDeviceId" doc:id="74f6608a-e401-4eac-9cf6-e242a5cb9620" key='#[attributes.uriParams.webDeviceId]' target="authToken" objectStore="WebDeviceAuthTokens">
+					<os:default-value><![CDATA[#[null]]]></os:default-value>
+				</os:retrieve>
+				<choice doc:name="Valid authToken for webDeviceId" doc:id="65303d38-c38f-41f1-9392-010af7071c38">
+					<when expression="#[(vars.authToken as String) == payload.authToken]">
+						<os:contains doc:name="Existing AccessToken for username" doc:id="6bfbcd4c-8097-4764-94de-aaf006bb55b7" key='#[payload.username]' target="existingAccessToken" objectStore="UserAccessTokens"/>
+						<choice doc:name="Existing AccessToken for username" doc:id="4d20c785-6d13-4012-8662-4e6c3e391bd6">
+							<when expression="#[vars.existingAccessToken]">
+								<os:retrieve doc:name="Retrieve AccessToken for username" doc:id="70c0d008-122d-4901-8a2e-220305c9d7ac" key='#[payload.username]' target="accessToken" objectStore="UserAccessTokens">
+									<os:default-value><![CDATA[#[null]]]></os:default-value>
+								</os:retrieve>
+								<os:store doc:name="Store AccessToken for webDeviceId" doc:id="32114e7b-9d48-487c-86d3-d6cdffd8b19e" key='#[attributes.uriParams.webDeviceId]' objectStore="WebDeviceAccessTokens">
+									<os:value><![CDATA[#[vars.accessToken]]]></os:value>
+		</os:store>
+							</when>
+							<otherwise>
+								<logger level="INFO" doc:name="Logger" doc:id="08c89cd8-d2e9-4fb8-a37e-21f76874cb95" message="No AccessToken for username in PUT #[payload.username] - existingVar - #[vars.existingAccessToken]" />
+							</otherwise>
+						</choice>
+					</when>
+					<otherwise>
+						<logger level="INFO" doc:name="Logger" doc:id="41f21449-c1ef-4069-9826-3acb041cf4be" message="Invalid authToken for webDeviceID - #[attributes.uriParams.webDeviceId] -authToken expected #[vars.authToken] - Received #[payload.authToken]" />
+					</otherwise>
+				</choice>
+			</when>
+			<otherwise>
+				<logger level="INFO" doc:name="Logger" doc:id="7262f090-3cdf-46df-abef-87afb408604b" message="No AuthToken for webDeviceId in PUT #[attributes.uriParams.webDeviceId]" />
+			</otherwise>
+		</choice>
+			</when>
+			<when expression='#[payload.state == "canceled"]'>
+				<os:remove doc:name="Remove webDeviceId Access Token" doc:id="ee4226e1-a037-4af1-8e89-bbf891714d95" key="#[attributes.uriParams.webDeviceId]" objectStore="WebDeviceAccessTokens"/>
+				<os:remove doc:name="Remove webDeviceId Auth Token" doc:id="caad55a0-ff76-49ab-b178-a555c0ad534e" key="#[attributes.uriParams.webDeviceId]" objectStore="WebDeviceAuthTokens"/>
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Logger" doc:id="13ce9052-3490-46c1-9e3a-b20b55a57a81" message="Unrecognized state in PUT - #[payload.state] - expected: authorized or canceled"/>
+			</otherwise>
+		</choice>
+		<ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" doc:id="2af954d2-b533-4b4f-a147-9b423a42afb7">
+            <ee:variables>
+                <ee:set-variable variableName="webDeviceId"><![CDATA[attributes.uriParams.webDeviceId]]></ee:set-variable>
+            </ee:variables>
+        </ee:transform>
+        <logger level="INFO" message="put:\auth_token\(webDeviceId):application\json:login-api-config" />
+    </flow>
+    <flow name="get:\auth_token\(webDeviceId):login-api-config">
+        <ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" doc:id="a4009bfa-00f1-4b40-af9b-c56459dee601">
+            <ee:variables>
+                <ee:set-variable variableName="webDeviceId"><![CDATA[attributes.uriParams.webDeviceId]]></ee:set-variable>
+            </ee:variables>
+        </ee:transform>
+		<os:contains doc:name="Existing AuthToken for webDeviceId ?" doc:id="3f7920ab-f20a-4563-83ea-53bbabc7eff9" key='#[attributes.uriParams.webDeviceId]' objectStore="WebDeviceAuthTokens" target="existingAuthToken" />
+		<choice doc:name="Existing Auth Token for webDeviceId" doc:id="6692eb67-4060-4998-94b2-d853a5a93446" >
+			<when expression="#[vars.existingAuthToken]">
+				<os:retrieve doc:name="Retrieve AuthToken for webDeviceId" doc:id="552cd4f7-d3d9-46be-b180-653a504a6b9e" key='#[attributes.uriParams.webDeviceId]' objectStore="WebDeviceAuthTokens" target="authToken">
+			<os:default-value><![CDATA[#[null]]]></os:default-value>
+		</os:retrieve>
+				<os:contains doc:name="Existing Access Token for webDeviceID ?" doc:id="94c04edf-51b0-4812-ad92-be43bc8015a0" key='#[attributes.uriParams.webDeviceId]' objectStore="WebDeviceAccessTokens" target="existingAccessToken"/>
+				<choice doc:name="Existing AccessToken for webDeviceId" doc:id="cad200ef-0818-4584-b6a7-6f356885c931">
+					<when expression="#[vars.existingAccessToken]">
+						<os:retrieve doc:name="Retrieve AccessToken for webDeviceId" doc:id="b649984c-6c04-4adb-a5e5-7080f09ca329" key='#[vars.webDeviceId]' target="accessToken" objectStore="WebDeviceAccessTokens">
+							<os:default-value ><![CDATA[#[null]]]></os:default-value>
+						</os:retrieve>
+					</when>
+					<otherwise >
+						<logger level="INFO" doc:name="Logger" doc:id="1574ac2c-c50a-4e73-b4b2-b8278bc91d50" message='#["No AccessToken for webDeviceId in GET " ++ attributes.uriParams.webDeviceId]' category="No authToken for webDeviceId" />
+					</otherwise>
+				</choice>
+			</when>
+			<otherwise >
+				<set-variable value="#[randomInt(1000000000)]" doc:name="Generate AuthToken for webDeviceId" doc:id="a5cda321-f344-4647-bbe7-294f917d5c48" variableName="authToken"/>
+				<os:store doc:name="Store AuthToken for webDeviceId" doc:id="547ba9b8-aafe-4537-add7-8818b723184a" key='#[attributes.uriParams.webDeviceId]' objectStore="WebDeviceAuthTokens">
+					<os:value ><![CDATA[#[vars.authToken]]]></os:value>
+				</os:store>
+				<logger level="INFO" doc:name="Logger" doc:id="e2ad5a87-1fda-4dea-8275-0dc486d1efaa" message='#["No AuthToken for webDeviceId in GET " ++ attributes.uriParams.webDeviceId]' category="No authToken for webDeviceId" />
+			</otherwise>
+		</choice>
+		<ee:transform doc:name="Return response" doc:id="22c1bd02-571c-464b-afc4-196ccb635794">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+if (isEmpty(vars.accessToken)) { 
+	authToken: vars.authToken as String,
+	state: "reserved"
+}
+else { 
+	authToken: vars.authToken as String,
+	state: "authorized",
+	accessToken: vars.accessToken
+}
+]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+    </flow>
+    <flow name="post:\access_token:application\json:login-api-config">
+		<set-variable value="#[attributes.headers.Authorization]" doc:name="Set Authorization Value" doc:id="40e58f75-8818-4199-ac11-629e79f3430f" variableName="Auth"/>
+		<http:request method="POST" doc:name="Request CC Auth" doc:id="267e51f4-c72b-416a-9ec4-e7ff07e9e0fc" config-ref="CC_HTTP_Request_config" path="/s/fap_storefront/dw/shop/v18_8/customers/auth">
+			<http:body ><![CDATA[#[output application/json
+---
+{
+	"type" : "credentials"
+}]]]></http:body>
+ <http:headers ><![CDATA[#[output application/java
+---
+{
+	"Content-Type" : "application/json",
+	"Origin" : "http://www.sitegenesis.com",
+	"x-dw-client-id" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	"Authorization" : vars.Auth
+}]]]></http:headers>
+
+		</http:request>
+		<os:store doc:name="Store Access Token" doc:id="b196974f-5807-483c-bae6-c40908877291" key='#[payload.email]' objectStore="UserAccessTokens">
+			<os:value ><![CDATA[#[attributes.headers.authorization]]]></os:value>
+		</os:store>
+		<ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd" doc:id="8368bd39-41a7-4129-ab85-1669aa6d42ad">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  accessToken: attributes.headers.authorization,
+  expiresIn: 1799
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+    </flow>
+</mule>

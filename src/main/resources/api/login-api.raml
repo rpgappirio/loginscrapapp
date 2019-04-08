@@ -1,0 +1,123 @@
+#%RAML 1.0
+title: Login API
+baseUri: http://loginapp.us-e2.cloudhub.io/api
+version: v1
+    
+/access_token:
+  post:
+    description: "Request customer access token for Comerce Cloud Storefront"
+    body:
+        application/json:
+          type: accessCredentials
+          example: |
+            {
+              "username": "mary.jane@appirio.com",
+              "password": "12345"
+            }
+    responses:
+      200:
+        body:
+          application/json:
+            type: accessToken
+            example: |
+              {
+                "accessToken": "af8a3e17-cd6d-4584-bbc4-21e467d1334f",
+                "expiresIn": 1799
+              }
+      204: 
+        description: "No content - missing customer login credentials"
+      403: 
+        description: "Forbidden - invalid customer loginc credentials"
+/auth_token:
+  description: "Customer Web Device (Kiosk) authorization to customer Comerce Cloud Store Front access. Manages web devices authorization tokens. Requires prior usage of POST /access_token."
+  /{webDeviceId}:
+    get:
+      description: "Provides an unique, time-bound authorization token for {webDeviceId}"
+      responses:
+        200:
+          description: "A previously generated unique, time-bound authorization token and related Commerce Cloud session access token for {webDeviceId} and its access token"
+          body:
+            application/json:
+              type: authToken
+              example: |
+                {
+                  "authToken": "465978327",
+                  "expiresIn": 900,
+                  "state": "authorized",
+                  "accessToken": "af8a3e17-cd6d-4584-bbc4-21e467d1334f"
+                }
+        201:
+          description: "An unique, time-bound token is generated for {webDeviceId}"
+          body:
+            application/json:
+              type: authToken
+              example: |
+                {
+                  "authToken": "465978327",
+                  "expiresIn": 10,
+                  "state": "reserved"
+                }
+    put:
+      description: "Manages {webDeviceId} against a previously authenticated customer of Comerce Cloud Store Front"
+      body:
+        application/json:
+          type: authorizationKeyPair
+          example: |
+            {
+              "authToken": "465978327",
+              "username": "mary.jane@appirio.com",
+              "state": "authorized"
+            }
+      responses:
+        200:
+          description: "Resource updated"
+        204: 
+          description: "No content - Unknown {webDeviceId}, username not authenticated or unrecognized token."
+types:
+  accessCredentials:
+    type: object
+    properties:
+      username:
+        pattern: ^.+@.+\..+$
+        required: true
+      password:
+        type: string
+        required: true
+  accessToken:
+    type: object
+    properties:
+      accessToken:
+        type: string
+        required: true
+      expiresIn:
+        type: number
+        required: true
+  authToken:
+    type: object
+    properties:
+      authToken:
+        type: string
+        required: true
+      expiresIn:
+        type: number
+        required: true
+      state:
+        type: string
+        required: false
+        enum: [reserved, authorized]
+      accessToken:
+        type: string
+        required: false
+  authorizationKeyPair:
+    type: object
+    properties:
+      authToken:
+        type: string
+        required: true
+      username:
+        type: string
+        required: true
+      state:
+        type: string
+        required: false
+        enum: [reserved, authorized, canceled]
